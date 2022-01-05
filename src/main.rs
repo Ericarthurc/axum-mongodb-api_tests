@@ -1,28 +1,49 @@
-use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router};
-use mongodb::{
-    bson::doc,
-    options::{ClientOptions, ResolverConfig},
-    Client,
+use axum::{
+    extract::Extension, http::StatusCode, response::IntoResponse, routing::get, AddExtensionLayer,
+    Router,
 };
+use database::DB;
+use dotenv::dotenv;
+use errors::AppError;
+use mongodb::{bson::doc, Database};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use std::env;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+mod database;
+mod errors;
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), AppError> {
+    dotenv().ok();
+    tracing_subscriber::fmt::init();
+
+    let db = DB::new(
+        &env::var("MONGO_URI").unwrap(),
+        &env::var("MONGO_DATABASE").unwrap(),
+    )
+    .await?;
+
     let api_routes = Router::new().route("/", get(handler));
 
     let app = Router::new()
         .fallback(get(handler_404))
-        .nest("/api", api_routes);
+        .nest("/api", api_routes)
+        .layer(AddExtensionLayer::new(db.mongo_db));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 4000));
-    println!("Server: {}", addr);
+    let addr = SocketAddr::from((
+        [127, 0, 0, 1],
+        env::var("PORT").unwrap().parse::<u16>().unwrap(),
+    ));
+    println!("Sever: {}", addr);
+    tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,19 +52,11 @@ struct Book {
     author: String,
 }
 
-async fn handler() -> Result<impl IntoResponse, AppError> {
-    // let db = connect_mongo().await?;
-    // let typed_collection = db.collection::<Book>("books");
-
-    let client = connect_mongo().await?;
-
-    // let collection = client.database("ok").collection("ok");
-
-    let db = client.database("rusty");
-    let collection = db.collection::<Book>("ok");
+async fn handler(Extension(mongo_db): Extension<Database>) -> Result<impl IntoResponse, AppError> {
+    let collection = mongo_db.collection::<Book>("ok");
 
     let handle = tokio::task::spawn(async move {
-        for collection_name in db.list_collection_names(None).await {
+        for collection_name in mongo_db.list_collection_names(None).await {
             println!("{:#?}", collection_name);
         }
 
@@ -67,73 +80,4 @@ async fn handler() -> Result<impl IntoResponse, AppError> {
 
 async fn handler_404() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, "nothing to see here")
-}
-
-enum AppError {
-    Mongo(mongodb::error::Error),
-    Elapsed(tower::timeout::error::Elapsed),
-    Tokio(TokioError),
-}
-
-enum TokioError {
-    Elapsed(tokio::time::error::Elapsed),
-    JoinError(tokio::task::JoinError),
-}
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> axum::response::Response {
-        let (status, error_message) = match self {
-            AppError::Mongo(error) => (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()),
-            AppError::Elapsed(error) => (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()),
-            AppError::Tokio(TokioError::Elapsed(error)) => {
-                (StatusCode::UNPROCESSABLE_ENTITY, error.to_string())
-            }
-            AppError::Tokio(TokioError::JoinError(error)) => {
-                (StatusCode::UNPROCESSABLE_ENTITY, error.to_string())
-            }
-        };
-
-        let body = Json(json!({ "error": error_message }));
-
-        (status, body).into_response()
-    }
-}
-
-impl From<tower::timeout::error::Elapsed> for AppError {
-    fn from(inner: tower::timeout::error::Elapsed) -> Self {
-        AppError::Elapsed(inner)
-    }
-}
-
-impl From<tokio::time::error::Elapsed> for AppError {
-    fn from(inner: tokio::time::error::Elapsed) -> Self {
-        AppError::Tokio(TokioError::Elapsed(inner))
-    }
-}
-
-impl From<tokio::task::JoinError> for AppError {
-    fn from(inner: tokio::task::JoinError) -> Self {
-        AppError::Tokio(TokioError::JoinError(inner))
-    }
-}
-
-impl From<mongodb::error::Error> for AppError {
-    fn from(inner: mongodb::error::Error) -> Self {
-        AppError::Mongo(inner)
-    }
-}
-
-async fn connect_mongo() -> Result<Client, AppError> {
-    let options = ClientOptions::parse_with_resolver_config(
-        "mongodb://localhost:27017",
-        ResolverConfig::cloudflare(),
-    )
-    .await?;
-
-    let client = Client::with_options(options)?;
-    println!("weha");
-    // let db = client.database("rusty");
-
-    // Ok(db)
-    Ok(client)
 }
