@@ -10,9 +10,15 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::net::SocketAddr;
 use std::time::Duration;
+use tower::layer::layer_fn;
+
+use tower::ServiceBuilder;
+
+use crate::middleware::MyMiddleware;
 
 mod database;
 mod errors;
+mod middleware;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -30,7 +36,11 @@ async fn main() -> Result<(), AppError> {
     let app = Router::new()
         .fallback(get(handler_404))
         .nest("/api", api_routes)
-        .layer(AddExtensionLayer::new(db.mongo_db));
+        .layer(
+            ServiceBuilder::new()
+                .layer(AddExtensionLayer::new(db.mongo_db))
+                .layer(layer_fn(|inner| MyMiddleware { inner })),
+        );
 
     let addr = SocketAddr::from((
         [127, 0, 0, 1],
@@ -75,6 +85,7 @@ async fn handler(Extension(mongo_db): Extension<Database>) -> Result<impl IntoRe
 
     tokio::time::timeout(Duration::from_secs(5), handle).await???;
 
+    println!("HERE");
     Ok((StatusCode::FOUND, "ROOT!"))
 }
 
