@@ -4,6 +4,7 @@ use mongodb::{
     Client, Database,
 };
 
+#[derive(Debug)]
 pub struct DB {
     pub mongo_db: Database,
 }

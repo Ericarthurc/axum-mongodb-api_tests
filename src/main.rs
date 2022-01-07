@@ -9,16 +9,24 @@ use mongodb::{bson::doc, Database};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::net::SocketAddr;
+use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use tower::layer::layer_fn;
 
+use std::sync::Arc;
 use tower::ServiceBuilder;
 
-use crate::middleware::MyMiddleware;
+use middleware::MyMiddleware;
 
 mod database;
 mod errors;
 mod middleware;
+
+#[derive(Debug)]
+struct State {
+    db: DB,
+    name: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -31,6 +39,11 @@ async fn main() -> Result<(), AppError> {
     )
     .await?;
 
+    let shared_state = Arc::new(State {
+        db,
+        name: "Eric".to_string(),
+    });
+
     let api_routes = Router::new().route("/", get(handler));
 
     let app = Router::new()
@@ -38,7 +51,7 @@ async fn main() -> Result<(), AppError> {
         .nest("/api", api_routes)
         .layer(
             ServiceBuilder::new()
-                .layer(AddExtensionLayer::new(db.mongo_db))
+                .layer(AddExtensionLayer::new(shared_state))
                 .layer(layer_fn(|inner| MyMiddleware { inner })),
         );
 
@@ -62,11 +75,14 @@ struct Book {
     author: String,
 }
 
-async fn handler(Extension(mongo_db): Extension<Database>) -> Result<impl IntoResponse, AppError> {
-    let collection = mongo_db.collection::<Book>("ok");
+async fn handler(Extension(state): Extension<Arc<State>>) -> Result<impl IntoResponse, AppError> {
+    let collection = state.db.mongo_db.collection::<Book>("ok");
+
+    println!("Handler: {}", state.name);
+    // state.name = "Taco".to_string();
 
     let handle = tokio::task::spawn(async move {
-        for collection_name in mongo_db.list_collection_names(None).await {
+        for collection_name in state.db.mongo_db.list_collection_names(None).await {
             println!("{:#?}", collection_name);
         }
 

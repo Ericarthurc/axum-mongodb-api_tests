@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
 use axum::{body::Body, http::Request, response::Response};
 use futures::future::BoxFuture;
+use mongodb::Database;
 use tower::Service;
+
+use crate::State;
 
 #[derive(Clone)]
 pub struct MyMiddleware<S> {
@@ -23,13 +28,16 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         println!("`MyMiddleware` called!");
 
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
-        println!("HERE!");
+        let extensions = req.extensions_mut().get::<Arc<State>>();
+
+        let extensions = extensions.unwrap();
+        println!("Middleware: {}", extensions.name);
 
         Box::pin(async move {
             let res: Response = inner.call(req).await?;
