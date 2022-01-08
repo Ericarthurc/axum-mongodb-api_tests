@@ -13,7 +13,7 @@ use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use tower::layer::layer_fn;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tower::ServiceBuilder;
 
 use middleware::MyMiddleware;
@@ -39,10 +39,10 @@ async fn main() -> Result<(), AppError> {
     )
     .await?;
 
-    let shared_state = Arc::new(State {
+    let shared_state = Arc::new(Mutex::new(State {
         db,
         name: "Eric".to_string(),
-    });
+    }));
 
     let api_routes = Router::new().route("/", get(handler));
 
@@ -75,13 +75,18 @@ struct Book {
     author: String,
 }
 
-async fn handler(Extension(state): Extension<Arc<State>>) -> Result<impl IntoResponse, AppError> {
-    let collection = state.db.mongo_db.collection::<Book>("ok");
-
-    println!("Handler: {}", state.name);
-    // state.name = "Taco".to_string();
+async fn handler(
+    Extension(state): Extension<Arc<Mutex<State>>>,
+) -> Result<impl IntoResponse, AppError> {
+    let state = Arc::clone(&state);
 
     let handle = tokio::task::spawn(async move {
+        let state = state.lock().unwrap();
+
+        println!("Handler: {}", state.name);
+
+        let collection = state.db.mongo_db.collection::<Book>("ok");
+
         for collection_name in state.db.mongo_db.list_collection_names(None).await {
             println!("{:#?}", collection_name);
         }
