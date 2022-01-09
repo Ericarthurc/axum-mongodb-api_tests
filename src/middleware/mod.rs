@@ -1,9 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::{body::Body, http::Request, response::Response};
 use futures::future::BoxFuture;
-use mongodb::Database;
+use tokio::sync::Mutex;
 use tower::Service;
 
 use crate::State;
@@ -35,13 +34,18 @@ where
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
+        req.extensions_mut().insert("middleware jwt");
+
         let extensions = req.extensions_mut().get::<Arc<Mutex<State>>>().unwrap();
         let state = Arc::clone(extensions);
-        let mut state = state.lock().unwrap();
-        println!("Middleware Pre: {}", state.name);
-        state.name = "Billy!".to_string();
 
         Box::pin(async move {
+            let mut state = state.lock().await;
+            println!("Middleware Pre: {}", state.name);
+            state.name = "Billy!".to_string();
+
+            drop(state);
+
             let res: Response = inner.call(req).await?;
 
             println!("`MyMiddleware` received the response");

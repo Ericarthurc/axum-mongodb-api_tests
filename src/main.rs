@@ -5,16 +5,16 @@ use axum::{
 use database::DB;
 use dotenv::dotenv;
 use errors::AppError;
-use mongodb::{bson::doc, Database};
+use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::net::SocketAddr;
-use std::ops::{Deref, DerefMut};
-use std::time::Duration;
+use std::{env, time::Duration};
 use tower::layer::layer_fn;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tower::ServiceBuilder;
+
+use tokio::sync::Mutex;
 
 use middleware::MyMiddleware;
 
@@ -79,18 +79,14 @@ async fn handler(
     Extension(state): Extension<Arc<Mutex<State>>>,
 ) -> Result<impl IntoResponse, AppError> {
     let state = Arc::clone(&state);
+    let mut state = state.lock().await;
+    let collection = state.db.mongo_db.collection::<Book>("ok");
+
+    println!("{}", state.name);
+
+    state.name = "Timmy!".to_string();
 
     let handle = tokio::task::spawn(async move {
-        let state = state.lock().unwrap();
-
-        println!("Handler: {}", state.name);
-
-        let collection = state.db.mongo_db.collection::<Book>("ok");
-
-        for collection_name in state.db.mongo_db.list_collection_names(None).await {
-            println!("{:#?}", collection_name);
-        }
-
         let books = vec![
             Book {
                 title: "The Grapes of Wrath".to_string(),
@@ -101,13 +97,13 @@ async fn handler(
                 author: "Harper Lee".to_string(),
             },
         ];
+
         collection.insert_many(books, None).await
     });
 
     tokio::time::timeout(Duration::from_secs(5), handle).await???;
 
-    println!("HERE");
-    Ok((StatusCode::FOUND, "ROOT!"))
+    Ok((StatusCode::FOUND, state.name.to_owned()))
 }
 
 async fn handler_404() -> impl IntoResponse {
