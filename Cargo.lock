@@ -200,6 +200,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-extra"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c76429f81fa75f4a30e117b52826af1f51cf8af68a525f8302ed7f37df602c"
+dependencies = [
+ "axum",
+ "http",
+ "mime",
+ "pin-project-lite",
+ "tower",
+ "tower-http",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "base64"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2079,6 +2095,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -2516,8 +2533,8 @@ version = "0.1.0"
 dependencies = [
  "askama",
  "async-fs",
- "async-trait",
  "axum",
+ "axum-extra",
  "chrono",
  "comrak",
  "dotenv",

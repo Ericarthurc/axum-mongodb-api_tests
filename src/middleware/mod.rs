@@ -1,11 +1,12 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{body::Body, http::Request, response::Response};
 use futures::future::BoxFuture;
 use tokio::sync::Mutex;
 use tower::Service;
 
-use crate::State;
+use crate::{Book, State};
+pub mod util;
 
 #[derive(Clone)]
 pub struct MyMiddleware<S> {
@@ -36,15 +37,31 @@ where
 
         req.extensions_mut().insert("middleware jwt");
 
-        let extensions = req.extensions_mut().get::<Arc<Mutex<State>>>().unwrap();
+        let extensions = req.extensions_mut().get::<Arc<State>>().unwrap();
         let state = Arc::clone(extensions);
+        let collection = state.db.mongo_db.collection::<Book>("ok");
+
+        let handle = tokio::task::spawn(async move {
+            let books = vec![
+                Book {
+                    title: "The Grapes of Wrath".to_string(),
+                    author: "John Steinbeck".to_string(),
+                },
+                Book {
+                    title: "To Kill a Mockingbird".to_string(),
+                    author: "Harper Lee".to_string(),
+                },
+            ];
+
+            collection.insert_many(books, None).await
+        });
 
         Box::pin(async move {
-            let mut state = state.lock().await;
-            println!("Middleware Pre: {}", state.name);
-            state.name = "Billy!".to_string();
-
-            drop(state);
+            tokio::time::timeout(Duration::from_secs(5), handle)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
 
             let res: Response = inner.call(req).await?;
 

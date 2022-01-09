@@ -25,7 +25,7 @@ mod middleware;
 #[derive(Debug)]
 struct State {
     db: DB,
-    name: String,
+    // name: String,
 }
 
 #[tokio::main]
@@ -39,20 +39,21 @@ async fn main() -> Result<(), AppError> {
     )
     .await?;
 
-    let shared_state = Arc::new(Mutex::new(State {
+    let shared_state = Arc::new(State {
         db,
-        name: "Eric".to_string(),
-    }));
+        // name: "Eric".to_string(),
+    });
 
-    let api_routes = Router::new().route("/", get(handler));
+    let api_routes = Router::new()
+        .route("/", get(handler))
+        .layer(axum_extra::middleware::from_fn(middleware::util::test));
 
     let app = Router::new()
         .fallback(get(handler_404))
         .nest("/api", api_routes)
+        .route("/taco", get(handler_taco))
         .layer(
-            ServiceBuilder::new()
-                .layer(AddExtensionLayer::new(shared_state))
-                .layer(layer_fn(|inner| MyMiddleware { inner })),
+            ServiceBuilder::new().layer(AddExtensionLayer::new(shared_state)), // .layer(axum_extra::middleware::from_fn(middleware::util::test)), // .layer(layer_fn(|inner| MyMiddleware { inner })),
         );
 
     let addr = SocketAddr::from((
@@ -75,16 +76,9 @@ struct Book {
     author: String,
 }
 
-async fn handler(
-    Extension(state): Extension<Arc<Mutex<State>>>,
-) -> Result<impl IntoResponse, AppError> {
+async fn handler(Extension(state): Extension<Arc<State>>) -> Result<impl IntoResponse, AppError> {
     let state = Arc::clone(&state);
-    let mut state = state.lock().await;
     let collection = state.db.mongo_db.collection::<Book>("ok");
-
-    println!("{}", state.name);
-
-    state.name = "Timmy!".to_string();
 
     let handle = tokio::task::spawn(async move {
         let books = vec![
@@ -103,9 +97,15 @@ async fn handler(
 
     tokio::time::timeout(Duration::from_secs(5), handle).await???;
 
-    Ok((StatusCode::FOUND, state.name.to_owned()))
+    Ok((StatusCode::FOUND, "bobby!"))
 }
 
 async fn handler_404() -> impl IntoResponse {
+    println!("404!");
     (StatusCode::NOT_FOUND, "nothing to see here")
+}
+
+async fn handler_taco() -> impl IntoResponse {
+    println!("TACOS!");
+    (StatusCode::OK, "nothing to see here... but TACOS!")
 }
