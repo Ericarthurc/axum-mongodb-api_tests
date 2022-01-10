@@ -39,7 +39,7 @@ where
 
         let extensions = req.extensions_mut().get::<Arc<State>>().unwrap();
         let state = Arc::clone(extensions);
-        let collection = state.db.mongo_db.collection::<Book>("ok");
+        let collection = state.mongo.mongo_db.collection::<Book>("ok");
 
         let handle = tokio::task::spawn(async move {
             let books = vec![

@@ -21,7 +21,7 @@ use crate::State;
 pub async fn test<B>(req: Request<B>, next: Next<B>) -> Result<impl IntoResponse, AppError> {
     let extensions = req.extensions().get::<Arc<State>>().unwrap();
     let state = Arc::clone(extensions);
-    let collection = state.db.mongo_db.collection::<RouteStat>("routestat");
+    let collection = state.mongo.mongo_db.collection::<RouteStat>("routestat");
 
     let route_stat = RouteStat {
         route: req.uri().to_string(),

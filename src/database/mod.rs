@@ -6,6 +6,7 @@ use mongodb::{
 
 #[derive(Debug)]
 pub struct DB {
+    pub mongo_client: Client,
     pub mongo_db: Database,
 }
 
@@ -15,7 +16,10 @@ impl DB {
             ClientOptions::parse_with_resolver_config(uri, ResolverConfig::cloudflare()).await?;
 
         let client = Client::with_options(options)?;
-        let mongo_db = client.database(database_name);
-        Ok(DB { mongo_db })
+        let db = client.database(database_name);
+        Ok(DB {
+            mongo_client: client,
+            mongo_db: db,
+        })
     }
 }
