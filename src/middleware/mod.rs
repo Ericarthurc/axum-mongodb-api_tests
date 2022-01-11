@@ -2,10 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use axum::{body::Body, http::Request, response::Response};
 use futures::future::BoxFuture;
-use tokio::sync::Mutex;
 use tower::Service;
 
-use crate::{Book, State};
+use crate::{models::book::Book, State};
 pub mod util;
 
 #[derive(Clone)]
@@ -39,21 +38,24 @@ where
 
         let extensions = req.extensions_mut().get::<Arc<State>>().unwrap();
         let state = Arc::clone(extensions);
-        let collection = state.mongo.mongo_db.collection::<Book>("ok");
+
+        let books = vec![
+            Book {
+                title: "The Grapes of Wrath".to_string(),
+                author: "John Steinbeck".to_string(),
+            },
+            Book {
+                title: "To Kill a Mockingbird".to_string(),
+                author: "Harper Lee".to_string(),
+            },
+        ];
 
         let handle = tokio::task::spawn(async move {
-            let books = vec![
-                Book {
-                    title: "The Grapes of Wrath".to_string(),
-                    author: "John Steinbeck".to_string(),
-                },
-                Book {
-                    title: "To Kill a Mockingbird".to_string(),
-                    author: "Harper Lee".to_string(),
-                },
-            ];
-
-            collection.insert_many(books, None).await
+            state
+                .mongo
+                .mongo_book_collection
+                .insert_many(books, None)
+                .await
         });
 
         Box::pin(async move {
